@@ -123,7 +123,7 @@ public:
     static MidiInput* openDevice (int deviceIndex,
                                   MidiInputCallback* callback);
 
-   #if JUCE_LINUX || JUCE_MAC || JUCE_IOS || DOXYGEN
+   #if JUCE_LINUX || JUCE_MAC || JUCE_IOS || DOXYGEN || ( JUCE_WINDOWS  && defined( COMMERCIAL_LICENSE_TE_VIRTUAL_MIDI ) )
     /** This will try to create a new midi input device (Not available on Windows).
 
         This will attempt to create a new midi input device with the specified name,
@@ -168,6 +168,11 @@ public:
 
 private:
     //==============================================================================
+
+    #if JUCE_WINDOWS  && defined(COMMERCIAL_LICENSE_TE_VIRTUAL_MIDI)
+	friend class Win32VirtualMidiInput;
+    #endif
+
     String name;
     void* internal = nullptr;
 

@@ -20,6 +20,10 @@
   ==============================================================================
 */
 
+#if defined(COMMERCIAL_LICENSE_TE_VIRTUAL_MIDI)
+#include "juce_win32_VirtualMidi.h"
+#endif
+
 namespace juce
 {
 
@@ -49,7 +53,12 @@ struct MidiServiceType
     virtual int getDefaultDeviceIndex (bool) = 0;
 
     virtual InputWrapper* createInputWrapper (MidiInput&, int, MidiInputCallback&) = 0;
-    virtual OutputWrapper* createOutputWrapper (int) = 0;
+	virtual OutputWrapper* createOutputWrapper(int) = 0;
+
+	#if defined(COMMERCIAL_LICENSE_TE_VIRTUAL_MIDI)
+	virtual InputWrapper* createInputWrapper(Win32VirtualMidiInput&, MidiInputCallback&) = 0;
+	virtual OutputWrapper* createOutputWrapper(Win32VirtualMidiOutput&) = 0;
+	#endif
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiServiceType)
 };
@@ -81,6 +90,20 @@ struct Win32MidiService  : public MidiServiceType,
     {
         return new Win32OutputWrapper (*this, index);
     }
+
+
+    #if defined(COMMERCIAL_LICENSE_TE_VIRTUAL_MIDI)
+	InputWrapper* createInputWrapper(Win32VirtualMidiInput& input, MidiInputCallback& callback) override
+	{
+		return new VirtualMidiInputWrapper(*this, input, callback);
+	}
+
+	OutputWrapper* createOutputWrapper(Win32VirtualMidiOutput& output) override
+	{
+		return new VirtualMidiOutputWrapper(*this, output);
+	}
+	#endif
+
 
 private:
     struct Win32InputWrapper;
@@ -580,6 +603,60 @@ private:
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Win32OutputWrapper)
     };
+
+    #if defined(COMMERCIAL_LICENSE_TE_VIRTUAL_MIDI)
+	//==============================================================================
+	struct VirtualMidiInputWrapper : public InputWrapper
+	{
+		VirtualMidiInputWrapper(Win32MidiService& p, Win32VirtualMidiInput& midiInput, MidiInputCallback& c) : input(midiInput), parent(p), callback(c)
+		{
+		}
+
+		String getDeviceName() override
+		{
+			return deviceName;
+		}
+
+		void start() override
+		{
+			input.startInt();
+		}
+
+		void stop() override
+		{
+				input.stopInt();
+		}
+
+		String deviceName;
+		Win32MidiService& parent;
+		Win32VirtualMidiInput& input;
+		MidiInputCallback& callback;
+		JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VirtualMidiInputWrapper)
+	};
+
+	//==============================================================================
+	struct VirtualMidiOutputWrapper : public OutputWrapper
+	{
+		VirtualMidiOutputWrapper(Win32MidiService& p, Win32VirtualMidiOutput& midiOutput) : output(midiOutput), parent(p)
+		{
+		}
+
+		void sendMessageNow(const MidiMessage& message) override
+		{
+			output.sendMessageNowInt(message);
+		}
+
+		String getDeviceName() override
+		{
+			return deviceName;
+		}
+
+		String deviceName;
+		Win32MidiService& parent;
+		Win32VirtualMidiOutput& output;
+		JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VirtualMidiOutputWrapper)
+	};
+    #endif
 
     //==============================================================================
     void asyncCheckForUnusedCollectors()
@@ -1754,6 +1831,32 @@ MidiInput* MidiInput::openDevice (int index, MidiInputCallback* callback)
     return in.release();
 }
 
+#if defined(COMMERCIAL_LICENSE_TE_VIRTUAL_MIDI)
+MidiInput* MidiInput::createNewDevice(const String& deviceName, MidiInputCallback* callback)
+{
+	std::unique_ptr<Win32VirtualMidiInput> in(Win32VirtualMidi::bindMidiInput(deviceName, callback));
+	std::unique_ptr<MidiServiceType::InputWrapper> wrapper;
+
+	if (!in)
+	{
+		return nullptr;
+	}
+
+	try
+	{
+		wrapper.reset(MidiService::getService().createInputWrapper(*in, *callback));
+	}
+	catch (std::runtime_error&)
+	{
+		return nullptr;
+	}
+	in->setName(deviceName);
+	in->internal = wrapper.release();
+
+	return in.release();
+}
+#endif
+
 MidiInput::~MidiInput()
 {
     delete static_cast<MidiServiceType::InputWrapper*> (internal);
@@ -1790,6 +1893,31 @@ MidiOutput* MidiOutput::openDevice (int index)
     out->internal = wrapper.release();
     return out.release();
 }
+
+#if defined(COMMERCIAL_LICENSE_TE_VIRTUAL_MIDI)
+MidiOutput* MidiOutput::createNewDevice(const String& deviceName)
+{
+	std::unique_ptr<Win32VirtualMidiOutput> out(Win32VirtualMidi::bindMidiOutput(deviceName));
+	std::unique_ptr<MidiServiceType::OutputWrapper> wrapper;
+
+	if (!out)
+	{
+		return nullptr;
+	}
+
+	try
+	{
+		wrapper.reset(MidiService::getService().createOutputWrapper( *out ));
+		out->internal = wrapper.release();
+	}
+	catch (std::runtime_error&)
+	{
+		return nullptr;
+	}
+
+	return out.release();
+}
+#endif
 
 MidiOutput::~MidiOutput()
 {

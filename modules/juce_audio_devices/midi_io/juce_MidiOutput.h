@@ -66,7 +66,7 @@ public:
     static MidiOutput* openDevice (int deviceIndex);
 
 
-   #if JUCE_LINUX || JUCE_MAC || JUCE_IOS || DOXYGEN
+   #if JUCE_LINUX || JUCE_MAC || JUCE_IOS || DOXYGEN || ( JUCE_WINDOWS  && defined( COMMERCIAL_LICENSE_TE_VIRTUAL_MIDI ) )
     /** This will try to create a new midi output device (Not available on Windows).
 
         This will attempt to create a new midi output device that other apps can connect
@@ -130,7 +130,12 @@ public:
 
 private:
     //==============================================================================
-    void* internal = nullptr;
+
+	#if JUCE_WINDOWS  && defined(COMMERCIAL_LICENSE_TE_VIRTUAL_MIDI)
+	friend class Win32VirtualMidiOutput;
+	#endif
+
+	void* internal = nullptr;
     CriticalSection lock;
     struct PendingMessage;
     PendingMessage* firstMessage = nullptr;
